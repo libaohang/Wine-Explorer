@@ -1,0 +1,1319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wine Sommelier</title>
+
+<!--
+  ============================================================
+  FONTS & EXTERNAL RESOURCES
+  ============================================================
+  We import two Google Fonts for a refined, editorial aesthetic:
+  - "Cormorant Garamond": elegant serif for headings — evokes a wine label
+  - "DM Sans": clean, modern sans for body text and UI chrome
+  Both load from Google's CDN which is allowed in the browser.
+-->
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;1,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+
+<style>
+  /* ============================================================
+     DESIGN TOKENS (CSS VARIABLES)
+     ============================================================
+     Centralising all colors, spacing, and type here means we
+     can retheme the app by changing a handful of values. The
+     palette is deep burgundy / cream / gold — classic wine aesthetic.
+  */
+  :root {
+    --bg:          #0f0a0e;       /* near-black with a warm red undertone */
+    --surface:     #1c1118;       /* slightly lighter surface for cards */
+    --border:      #2e1f28;       /* subtle warm border */
+    --accent:      #9b2335;       /* deep burgundy — primary action color */
+    --accent-lit:  #c94060;       /* lighter burgundy for hover states */
+    --gold:        #c9a84c;       /* warm gold for highlights */
+    --text-1:      #f0e8e0;       /* primary text — warm cream */
+    --text-2:      #9c8a80;       /* secondary text — muted warm gray */
+    --text-3:      #5c4a45;       /* tertiary / placeholder text */
+    --radius:      12px;
+    --font-display: 'Cormorant Garamond', serif;
+    --font-body:    'DM Sans', sans-serif;
+  }
+
+  /* ============================================================
+     RESET & BASE
+     ============================================================
+     Box-sizing reset ensures padding doesn't affect element width.
+     Everything inherits the body font by default.
+  */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text-1);
+    font-family: var(--font-body);
+    font-size: 15px;
+    line-height: 1.6;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+
+    /*
+      BACKGROUND TEXTURE
+      A radial gradient centred at the top creates a soft "light source"
+      effect. The ::before pseudo-element adds a subtle noise texture on
+      top for depth — pure CSS, no images needed.
+    */
+    background-image:
+      radial-gradient(ellipse 80% 50% at 50% -10%, #3a0a1a 0%, transparent 70%);
+  }
+
+  /* Grain texture overlay — adds tactile depth to the dark background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.4;
+  }
+
+  /* ============================================================
+     LAYOUT
+     ============================================================
+     The app is a single centered column. Max-width constrains it
+     to a comfortable reading width on large screens.
+  */
+  .app {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: 680px;
+    padding: 60px 24px 80px;
+    display: flex;
+    flex-direction: column;
+    gap: 40px;
+  }
+
+  /* ============================================================
+     HEADER
+     ============================================================
+     The decorative rule above/below the title is a classic editorial
+     trick — two thin lines with the title centred between them.
+  */
+  .header {
+    text-align: center;
+  }
+
+  .header-rule {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+  .header-rule::before,
+  .header-rule::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--gold), transparent);
+  }
+
+  .header-emblem {
+    font-size: 22px;
+    color: var(--gold);
+    opacity: 0.8;
+  }
+
+  .header h1 {
+    font-family: var(--font-display);
+    font-size: clamp(2.2rem, 5vw, 3.2rem);
+    font-weight: 400;
+    letter-spacing: 0.02em;
+    color: var(--text-1);
+    line-height: 1.1;
+  }
+
+  .header h1 em {
+    font-style: italic;
+    color: var(--gold);
+  }
+
+  .header p {
+    margin-top: 10px;
+    color: var(--text-2);
+    font-size: 13px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    font-weight: 300;
+  }
+
+  /* ============================================================
+     API KEY SECTION
+     ============================================================
+     In a real production app, the API key would live on a backend
+     server and never be exposed in the browser. For this demo/
+     prototype, we collect it from the user at runtime so the HTML
+     file is self-contained and shareable.
+
+     The key is stored only in a JS variable — it's never persisted
+     to localStorage or sent anywhere except the Anthropic API.
+  */
+  .key-section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px 24px;
+  }
+
+  .key-section label {
+    display: block;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-2);
+    margin-bottom: 10px;
+    font-weight: 500;
+  }
+
+  .key-row {
+    display: flex;
+    gap: 10px;
+  }
+
+  .key-row input {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    color: var(--text-1);
+    font-family: var(--font-body);
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .key-row input:focus { border-color: var(--accent); }
+  .key-row input::placeholder { color: var(--text-3); }
+
+  .key-row button {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 20px;
+    font-family: var(--font-body);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.2s;
+    white-space: nowrap;
+  }
+  .key-row button:hover { background: var(--accent-lit); }
+
+  .key-status {
+    margin-top: 8px;
+    font-size: 12px;
+    color: var(--text-3);
+    min-height: 16px;
+  }
+  .key-status.ok  { color: #5a9e6f; }
+  .key-status.err { color: #c45555; }
+
+  /* ============================================================
+     MAIN VOICE CARD
+     ============================================================
+     This is the primary interaction surface. It is locked (pointer-
+     events: none, reduced opacity) until an API key is set.
+  */
+  .voice-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 40px 32px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 28px;
+    transition: opacity 0.3s;
+  }
+  .voice-card.locked {
+    opacity: 0.4;
+    pointer-events: none;
+    user-select: none;
+  }
+
+  /* ============================================================
+     MICROPHONE BUTTON
+     ============================================================
+     The mic button has three visual states:
+     - idle:       dark background, subtle border
+     - recording:  red background + pulse animation (shows "listening")
+     - thinking:   spinning arc animation (shows "processing")
+
+     CSS custom properties drive the state changes — JS just toggles
+     classes, and CSS handles all the visual transitions.
+  */
+  .mic-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Pulse ring — only visible during recording state */
+  .pulse-ring {
+    position: absolute;
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    border: 2px solid var(--accent);
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .mic-btn {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    border: 1.5px solid var(--border);
+    background: var(--bg);
+    color: var(--text-2);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s, border-color 0.2s, color 0.2s, transform 0.15s;
+    position: relative;
+    z-index: 1;
+  }
+  .mic-btn:hover:not(:disabled) {
+    border-color: var(--accent);
+    color: var(--text-1);
+    transform: scale(1.04);
+  }
+  .mic-btn:disabled { cursor: not-allowed; opacity: 0.5; }
+
+  /* RECORDING state */
+  .mic-btn.recording {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+  .mic-btn.recording ~ .pulse-ring {
+    animation: pulse 1.4s ease-out infinite;
+  }
+
+  /* THINKING state — spinning border trick */
+  .mic-btn.thinking {
+    border-color: transparent;
+    background: var(--bg);
+    color: var(--text-2);
+    animation: spin-border 1s linear infinite;
+  }
+
+  @keyframes pulse {
+    0%   { transform: scale(1);   opacity: 0.6; }
+    100% { transform: scale(1.7); opacity: 0; }
+  }
+
+  /* Spinning border is achieved by animating a conic-gradient on the
+     ::before pseudo-element rather than the border itself */
+  .mic-btn.thinking::before {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    border-radius: 50%;
+    background: conic-gradient(var(--accent) 0deg, transparent 120deg);
+    animation: spin 1s linear infinite;
+    z-index: -1;
+  }
+  .mic-btn.thinking::after {
+    content: '';
+    position: absolute;
+    inset: 1px;
+    border-radius: 50%;
+    background: var(--bg);
+    z-index: -1;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  /* Mic icon SVG inside the button */
+  .mic-icon { width: 28px; height: 28px; pointer-events: none; }
+
+  /* ============================================================
+     STATUS TEXT
+     ============================================================
+     One line below the button that describes what's happening.
+     Transitions smoothly between states.
+  */
+  .status-text {
+    font-size: 13px;
+    color: var(--text-3);
+    letter-spacing: 0.04em;
+    text-align: center;
+    min-height: 20px;
+    transition: color 0.3s;
+  }
+  .status-text.active { color: var(--text-2); }
+  .status-text.error  { color: #c45555; }
+
+  /* ============================================================
+     QUESTION INPUT
+     ============================================================
+     Serves dual purpose:
+     - Editable text field for typing a question directly
+     - Display of the transcript after voice input
+
+     It is always visible (not toggled) so the user always knows
+     they can type. The mic button and this field are two equal
+     input paths that both feed into askQuestion().
+
+     The send button appears only when there is text in the field.
+  */
+  .transcript-wrap {
+    width: 100%;
+  }
+
+  .transcript-label {
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-3);
+    margin-bottom: 6px;
+    font-weight: 500;
+  }
+
+  /* Row containing the textarea + send button */
+  .input-row {
+    display: flex;
+    gap: 10px;
+    align-items: flex-end;
+  }
+
+  /*
+    Using a textarea (not an input) so the field grows with long
+    questions. resize: none disables the browser's drag handle —
+    we auto-resize via JS instead.
+  */
+  .transcript-bubble {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 18px;
+    color: var(--text-1);
+    font-family: var(--font-display);
+    font-size: 17px;
+    font-style: italic;
+    line-height: 1.5;
+    outline: none;
+    resize: none;
+    overflow: hidden;
+    min-height: 52px;
+    transition: border-color 0.2s;
+    /* textarea-specific resets */
+    width: 100%;
+    display: block;
+  }
+  .transcript-bubble::placeholder {
+    color: var(--text-3);
+    font-style: italic;
+  }
+  .transcript-bubble:focus {
+    border-color: var(--accent);
+  }
+  /* Disabled during API call so user can't edit mid-request */
+  .transcript-bubble:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  /* Send button — sits to the right of the textarea */
+  .send-btn {
+    flex-shrink: 0;
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--accent);
+    color: #fff;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s, opacity 0.2s;
+    /* Hidden when field is empty — shown via JS */
+    opacity: 0;
+    pointer-events: none;
+  }
+  .send-btn.visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .send-btn:hover { background: var(--accent-lit); }
+  .send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .send-btn svg { width: 18px; height: 18px; }
+
+  /* ============================================================
+     ANSWER CARD
+     ============================================================
+     The Claude-generated answer. Uses a left accent border in the
+     gold color to visually distinguish it from the transcript.
+     Hidden until there is content.
+  */
+  .answer-wrap {
+    width: 100%;
+    display: none;
+  }
+  .answer-wrap.visible { display: block; }
+
+  .answer-question {
+  font-size: 13px;
+  color: var(--text-3);
+  font-style: italic;
+  margin-bottom: 6px;
+  }
+
+  .answer-label {
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-3);
+    margin-bottom: 6px;
+    font-weight: 500;
+  }
+
+  .answer-card {
+    border-left: 2px solid var(--gold);
+    padding: 16px 20px;
+    font-size: 15px;
+    color: var(--text-1);
+    line-height: 1.7;
+    background: rgba(201, 168, 76, 0.05);
+    border-radius: 0 10px 10px 0;
+  }
+
+  /* Animated typing cursor — shows while Claude's answer streams in */
+  .cursor {
+    display: inline-block;
+    width: 2px;
+    height: 1em;
+    background: var(--gold);
+    margin-left: 2px;
+    vertical-align: text-bottom;
+    animation: blink 0.8s step-end infinite;
+  }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+
+  /* ============================================================
+     EXAMPLE QUESTIONS
+     ============================================================
+     Clickable chips that pre-fill a question — lowers the barrier
+     to entry for first-time users. Clicking one triggers the full
+     voice pipeline (bypassing mic recording, going straight to API).
+  */
+  .examples-section {
+    width: 100%;
+  }
+
+  .examples-label {
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-3);
+    margin-bottom: 12px;
+    font-weight: 500;
+  }
+
+  .chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .chip {
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 100px;
+    padding: 7px 16px;
+    font-family: var(--font-body);
+    font-size: 12.5px;
+    color: var(--text-2);
+    cursor: pointer;
+    transition: border-color 0.2s, color 0.2s, background 0.2s;
+    text-align: left;
+  }
+  .chip:hover {
+    border-color: var(--accent);
+    color: var(--text-1);
+    background: rgba(155, 35, 53, 0.08);
+  }
+
+  /* ============================================================
+     DATASET BADGE
+     ============================================================
+     Shows at the bottom to remind users what data is loaded.
+     The green dot pulses to indicate the data is "live".
+  */
+  .dataset-badge {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--text-3);
+  }
+
+  .dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: #5a9e6f;
+    flex-shrink: 0;
+    animation: dot-pulse 2.5s ease-in-out infinite;
+  }
+  @keyframes dot-pulse {
+    0%,100%{opacity:1} 50%{opacity:0.4}
+  }
+
+  /* ============================================================
+     SPEAKING INDICATOR
+     ============================================================
+     Three animated bars that appear while the TTS is speaking —
+     classic audio visualiser metaphor.
+  */
+  .speaking-indicator {
+    display: none;
+    align-items: flex-end;
+    gap: 3px;
+    height: 18px;
+  }
+  .speaking-indicator.visible { display: flex; }
+  .speaking-indicator span {
+    width: 3px;
+    background: var(--gold);
+    border-radius: 2px;
+    animation: bar 0.8s ease-in-out infinite;
+  }
+  .speaking-indicator span:nth-child(1) { height: 8px;  animation-delay: 0s; }
+  .speaking-indicator span:nth-child(2) { height: 14px; animation-delay: 0.15s; }
+  .speaking-indicator span:nth-child(3) { height: 10px; animation-delay: 0.3s; }
+  .speaking-indicator span:nth-child(4) { height: 16px; animation-delay: 0.1s; }
+  .speaking-indicator span:nth-child(5) { height: 6px;  animation-delay: 0.25s; }
+  @keyframes bar {
+    0%,100%{transform:scaleY(0.4)} 50%{transform:scaleY(1)}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ============================================================
+       HEADER
+       ============================================================ -->
+  <header class="header">
+    <div class="header-rule">
+      <span class="header-emblem">🍷</span>
+    </div>
+    <h1>Your <em>Sommelier</em></h1>
+    <p>Voice-powered wine intelligence</p>
+  </header>
+
+  <!-- ============================================================
+       API KEY INPUT
+       ============================================================
+       WHY HERE: The key is needed before any API calls can be made.
+       It is stored in the `apiKey` JS variable and never persisted.
+
+       In production you'd move this server-side (a simple /ask
+       endpoint that adds the key and forwards to Anthropic) so the
+       key is never visible in the browser at all.
+  -->
+  <section class="key-section">
+    <label>Anthropic API Key</label>
+    <div class="key-row">
+      <input type="password" id="api-key-input" placeholder="sk-ant-..." autocomplete="off">
+      <button onclick="setApiKey()">Connect</button>
+    </div>
+    <div class="key-status" id="key-status">Enter your key to begin</div>
+  </section>
+
+  <!-- ============================================================
+       VOICE CARD (locked until key is set)
+       ============================================================ -->
+  <section class="voice-card locked" id="voice-card">
+
+    <!-- MIC BUTTON
+         Three states handled by CSS classes:
+         - (none)      = idle, waiting for user to press
+         - .recording  = SpeechRecognition is active, listening
+         - .thinking   = API call in flight, awaiting Claude's answer
+    -->
+    <div class="mic-wrap">
+      <div class="pulse-ring"></div>
+      <button class="mic-btn" id="mic-btn" onclick="handleMicClick()" aria-label="Start listening">
+        <!-- Microphone SVG icon -->
+        <svg class="mic-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="9" y="2" width="6" height="11" rx="3"/>
+          <path d="M5 10a7 7 0 0 0 14 0"/>
+          <line x1="12" y1="19" x2="12" y2="22"/>
+          <line x1="8"  y1="22" x2="16" y2="22"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- STATUS TEXT — one-liner describing current state -->
+    <p class="status-text" id="status-text">Press to ask a question</p>
+
+    <!-- SPEAKING INDICATOR — animated bars during TTS playback -->
+    <div class="speaking-indicator" id="speaking-indicator">
+      <span></span><span></span><span></span><span></span><span></span>
+    </div>
+
+    <!-- QUESTION INPUT
+         Doubles as transcript display (after voice) and text input.
+         Always visible — the user can type here at any time.
+         Voice input populates this field too, so the user can
+         edit a mis-transcribed question before submitting.
+    -->
+    <div class="transcript-wrap" id="transcript-wrap">
+      <div class="transcript-label">Your question</div>
+      <div class="input-row">
+        <textarea
+          class="transcript-bubble"
+          id="transcript-text"
+          placeholder="Type a question, or press the mic…"
+          rows="1"
+          oninput="handleTextInput(this)"
+          onkeydown="handleTextKeydown(event)"
+        ></textarea>
+        <!-- Send button — appears when the field has text -->
+        <button class="send-btn" id="send-btn" onclick="submitTextQuestion()" aria-label="Send question" disabled>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="22" y1="2" x2="11" y2="13"/>
+            <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- ANSWER CARD — Claude's response -->
+    <div class="answer-wrap" id="answer-wrap">
+      <div class="answer-question" id="answer-question"></div>
+      <div class="answer-label">Sommelier</div>
+      <div class="answer-card" id="answer-text"></div>
+    </div>
+
+    <!-- EXAMPLE QUESTIONS
+         Each chip calls askQuestion(text) directly, skipping the mic.
+         This lets users explore the app without speaking.
+    -->
+    <div class="examples-section">
+      <div class="examples-label">Try asking</div>
+      <div class="chips">
+        <button class="chip" onclick="askQuestion(this.textContent)">Best-rated wines under $50?</button>
+        <button class="chip" onclick="askQuestion(this.textContent)">What do you have from Burgundy?</button>
+        <button class="chip" onclick="askQuestion(this.textContent)">Most expensive bottle?</button>
+        <button class="chip" onclick="askQuestion(this.textContent)">Good housewarming gift wine?</button>
+        <button class="chip" onclick="askQuestion(this.textContent)">Any natural wines?</button>
+        <button class="chip" onclick="askQuestion(this.textContent)">Best Pinot Noir available?</button>
+      </div>
+    </div>
+
+    <!-- DATASET STATUS BADGE -->
+    <div class="dataset-badge">
+      <div class="dot"></div>
+      <span id="dataset-badge-text">Loading wine dataset…</span>
+    </div>
+  </section>
+
+</div>
+
+<script>
+/* ================================================================
+   SCRIPT OVERVIEW
+   ================================================================
+   This script is organised into four sections:
+
+   1. STATE          — all mutable app state in one place
+   2. DATA LOADING   — fetch and format the wine CSV
+   3. API            — the Claude API call (with prompt caching)
+   4. VOICE I/O      — SpeechRecognition + SpeechSynthesis wiring
+   5. UI HELPERS     — DOM updates and state transitions
+   6. ENTRY POINTS   — handleMicClick(), askQuestion(), setApiKey()
+
+   Read from top to bottom for the full data flow.
+================================================================ */
+
+
+/* ================================================================
+   1. STATE
+   ================================================================
+   All mutable values live here. Keeping them in one object makes
+   it easy to see what can change and prevents hidden globals.
+================================================================ */
+const state = {
+  apiKey:       '',          // Set by the user via the input field
+  wineData:     '',          // The formatted wine dataset string (built once at load)
+  wineCount:    0,           // Number of wines loaded (for the badge)
+  isRecording:  false,       // True while SpeechRecognition is active
+  isThinking:   false,       // True while the API call is in flight
+  isSpeaking:   false,       // True while SpeechSynthesis is playing
+  recognition:  null,        // The SpeechRecognition instance
+};
+
+
+/* ================================================================
+   2. DATA LOADING
+   ================================================================
+   We fetch the wine dataset ONCE at startup and format it into a
+   compact pipe-delimited string. This string is injected into
+   every Claude API call as part of the (cached) system prompt.
+
+   WHY PIPE-DELIMITED?
+   JSON repeats every key name for every row, e.g.:
+     {"Name":"X","Producer":"Y","Region":"Z",...}
+   Pipe-delimited omits the keys entirely:
+     X | Y | Z | ...
+   For 500 wines this saves thousands of tokens, which means:
+   - Lower cost per call
+   - Faster time-to-first-token
+   - More room for Claude's answer
+
+   WHY EXCLUDE some fields?
+   Fields like Id, Upc, reference_url, image_url are useless for
+   answering voice questions. Dropping them makes the prompt leaner.
+================================================================ */
+function parseRatings(raw) {
+  if (!raw) return 'unrated';
+  try {
+    // The field is a JSON string, so parse it first
+    const ratings = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    if (!Array.isArray(ratings) || ratings.length === 0) return 'unrated';
+    // Format each rating as "Source: score/max_score"
+    return ratings
+      .map(r => `${r.source}: ${r.score}/${r.max_score}`)
+      .join(', ');
+  } catch {
+    return 'unrated';
+  }
+}
+
+function buildWineString(wines) {
+  /*
+    Format each wine as a compact pipe-delimited row.
+    We deliberately exclude: Id, Upc, image_url, reference_url
+    — those fields are useless for answering wine questions.
+
+    Vintage 0 means Non-Vintage (NV) — common for Champagne.
+  */
+  return wines.map(w => {
+    const vintage = w.Vintage > 0 ? w.Vintage : 'NV';
+    const rating = parseRatings(w.professional_ratings);
+    return [
+      w.Name,
+      w.Producer,
+      `${w.Appellation}, ${w.Region}, ${w.Country}`,
+      w.Varietal,
+      vintage,
+      `$${w.Retail}`,
+      `${w.ABV}%`,
+      w.color,
+      rating,
+      `${w.volume_ml}ml`
+    ].join(' | ');
+  }).join('\n');
+}
+
+async function loadWineData() {
+  try {
+    const res   = await fetch('wines.json');
+    const wines = await res.json();
+
+    state.wineData  = buildWineString(wines);
+    state.wineCount = wines.length;
+
+    document.getElementById('dataset-badge-text').textContent =
+      `${state.wineCount} wines loaded`;
+  } catch (err) {
+    document.getElementById('dataset-badge-text').textContent =
+      'Failed to load wine data';
+    console.error('Dataset load error:', err);
+  }
+}
+
+
+/* ================================================================
+   3. CLAUDE API CALL
+   ================================================================
+   This is the heart of the app. Every user question goes through
+   askClaude() which returns Claude's answer as a plain string.
+
+   KEY DESIGN DECISIONS:
+
+   A) SYSTEM PROMPT WITH PROMPT CACHING
+      The system prompt is split into a single block with
+      cache_control: { type: "ephemeral" }. This tells Anthropic
+      to cache the processed tokens server-side for up to 5 minutes.
+
+      On the FIRST call: Anthropic processes all wine data tokens
+      (charges ~1× input cost) and stores the result.
+      On SUBSEQUENT calls within 5 min: Anthropic retrieves the
+      cached result (charges ~0.1× input cost). Faster + cheaper.
+
+      The header "anthropic-beta: prompt-caching-2024-07-31" is
+      required to opt into this feature.
+
+   B) NO CONVERSATION HISTORY
+      We only send the current question in the messages array —
+      no history. This is correct because each wine question is
+      independent. Sending history would:
+      - Waste tokens (cost + latency)
+      - Risk confusing Claude with irrelevant prior context
+      - Make the context window fill up over a long session
+
+   C) LOW max_tokens
+      Voice answers should be short — 2–3 sentences max. Setting
+      max_tokens: 256 means Claude stops after a concise answer
+      and we don't pay for long rambling responses.
+
+   D) TIGHT SYSTEM PROMPT
+      Every word in the system prompt costs tokens. We keep it to
+      the minimum needed to constrain Claude's behaviour:
+      - Only answer from the data (no hallucination)
+      - Be concise (spoken aloud)
+      - Handle unknowns gracefully
+================================================================ */
+async function askClaude(question) {
+  const SYSTEM_PROMPT =
+`Wine sommelier assistant. Answer ONLY using the wine data below.
+Be concise — 2 to 3 sentences, answers are spoken aloud.
+If the question cannot be answered from the data, say so honestly.
+Do not invent or guess facts not in the inventory.
+
+WINE INVENTORY (Name | Producer | Appellation/Region/Country | Varietal | Vintage | Price | ABV | Color | Rating | Volume):
+${state.wineData}`;
+
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type':    'application/json',
+      'x-api-key':       state.apiKey,
+      /*
+        anthropic-version: tells the API which version of the
+        request/response schema to use. Always include this.
+        "2023-06-01" is the current stable version.
+      */
+      'anthropic-version': '2023-06-01',
+      /*
+        anthropic-beta: opts into the prompt caching feature.
+        Without this header, cache_control blocks are ignored.
+      */
+      'anthropic-beta':  'prompt-caching-2024-07-31',
+      'anthropic-dangerous-direct-browser-access': 'true',
+    },
+    body: JSON.stringify({
+      model:      'claude-sonnet-4-6', // best speed/quality for voice latency
+      max_tokens: 256,                 // short spoken answers only
+
+      /*
+        SYSTEM PROMPT AS AN ARRAY
+        When using prompt caching, system must be an array of content
+        blocks (not a plain string). Each block can independently have
+        cache_control applied to it.
+
+        Here we have one block with the entire system prompt + wine
+        data. The cache_control marks it for server-side caching.
+      */
+      system: [
+        {
+          type:          'text',
+          text:          SYSTEM_PROMPT,
+          cache_control: { type: 'ephemeral' }
+        }
+      ],
+
+      /*
+        MESSAGES ARRAY — just the current question, nothing else.
+        No history. No prior assistant turns. Clean every call.
+      */
+      messages: [
+        { role: 'user', content: question }
+      ]
+    })
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err?.error?.message || `API error ${res.status}`);
+  }
+
+  const data = await res.json();
+  /*
+    data.content is an array of content blocks. For a simple
+    text response it will be:
+      [ { type: "text", text: "Claude's answer here" } ]
+    We join all text blocks in case there are multiple.
+  */
+  return data.content
+    .filter(b => b.type === 'text')
+    .map(b => b.text)
+    .join('');
+}
+
+
+/* ================================================================
+   4. VOICE I/O
+   ================================================================
+   Two separate browser APIs handle voice:
+
+   A) SpeechRecognition (input) — converts microphone audio to text
+      - Provided by the browser (no API key, no server, free)
+      - Works in Chrome and Edge; Firefox requires a flag
+      - We use interim results: false so we only get the final
+        transcript after the user stops speaking (not word-by-word)
+      - continuous: false means one utterance → one result → done
+
+   B) SpeechSynthesis (output) — converts text to spoken audio
+      - Also browser-native, also free
+      - We cancel any existing speech before starting new (prevents
+        overlapping voices if the user asks a second question quickly)
+      - onend callback lets us update the UI when speech finishes
+================================================================ */
+
+function initRecognition() {
+  /*
+    SpeechRecognition is prefixed in some browsers.
+    We check both the standard and the webkit-prefixed version.
+  */
+  const SpeechRecognition =
+    window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  if (!SpeechRecognition) return null;
+
+  const rec = new SpeechRecognition();
+  rec.lang            = 'en-US';
+  rec.interimResults  = false; // only fire result when speech ends
+  rec.continuous      = false; // one utterance per start() call
+  rec.maxAlternatives = 1;     // we only care about the best transcript
+
+  rec.onresult = (event) => {
+    /*
+      event.results[0][0].transcript is the transcribed text.
+      Confidence (0–1) is also available but we don't use it.
+    */
+    const transcript = event.results[0][0].transcript;
+    askQuestion(transcript);
+  };
+
+  rec.onerror = (event) => {
+    setStatus(`Mic error: ${event.error}`, 'error');
+    setIdle();
+  };
+
+  rec.onend = () => {
+    /*
+      onend fires when recognition stops for any reason.
+      If we're still in recording state at this point (no result
+      was returned), the user probably didn't say anything.
+    */
+    if (state.isRecording && !state.isThinking) {
+      setStatus('No speech detected — try again', 'error');
+      setIdle();
+    }
+  };
+
+  return rec;
+}
+
+function speakAnswer(text) {
+  /*
+    Cancel any currently playing speech before starting new.
+    This prevents overlapping voices on rapid successive questions.
+  */
+  window.speechSynthesis.cancel();
+
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.rate   = 1.0;  // normal speaking speed
+  utterance.pitch  = 1.0;
+  utterance.volume = 1.0;
+
+  state.isSpeaking = true;
+  showSpeakingIndicator(true);
+
+  utterance.onend = () => {
+    state.isSpeaking = false;
+    showSpeakingIndicator(false);
+    setStatus('Press to ask another question');
+  };
+
+  utterance.onerror = () => {
+    state.isSpeaking = false;
+    showSpeakingIndicator(false);
+  };
+
+  window.speechSynthesis.speak(utterance);
+}
+
+
+/* ================================================================
+   5. UI HELPERS
+   ================================================================
+   These functions update the DOM to reflect state changes.
+   Keeping DOM manipulation here (not scattered throughout the
+   logic) makes the code easier to follow and debug.
+================================================================ */
+
+const micBtn      = () => document.getElementById('mic-btn');
+const statusEl    = () => document.getElementById('status-text');
+const transcriptW = () => document.getElementById('transcript-wrap');
+const transcriptT = () => document.getElementById('transcript-text');
+const sendBtn     = () => document.getElementById('send-btn');
+const answerW     = () => document.getElementById('answer-wrap');
+const answerT     = () => document.getElementById('answer-text');
+const speakingEl  = () => document.getElementById('speaking-indicator');
+
+function setStatus(msg, type = 'active') {
+  const el = statusEl();
+  el.textContent = msg;
+  el.className   = `status-text ${type}`;
+}
+
+function setRecording(on) {
+  state.isRecording = on;
+  micBtn().classList.toggle('recording', on);
+  micBtn().disabled = false;
+}
+
+function setThinking(on) {
+  state.isThinking = on;
+  micBtn().classList.toggle('thinking', on);
+  micBtn().disabled = on;
+  // Disable text input during API call
+  transcriptT().disabled = on;
+  sendBtn().disabled = on;
+}
+
+function setIdle() {
+  state.isRecording = false;
+  state.isThinking  = false;
+  micBtn().classList.remove('recording', 'thinking');
+  micBtn().disabled = false;
+  transcriptT().disabled = false;
+  updateSendBtn();
+}
+
+function showTranscript(text) {
+  /*
+    After voice input: populate the textarea with the transcript
+    so the user can see (and edit) what was heard before the
+    answer arrives. The field is disabled during the API call
+    to prevent edits mid-request.
+  */
+  const ta = transcriptT();
+  ta.value = text;
+  autoResize(ta);
+  updateSendBtn();
+}
+
+/*
+  Auto-resize the textarea to fit its content.
+  We reset height to 'auto' first so it can shrink when text
+  is deleted, then set it to scrollHeight to grow with new text.
+*/
+function autoResize(ta) {
+  ta.style.height = 'auto';
+  ta.style.height = ta.scrollHeight + 'px';
+}
+
+/*
+  Show/hide the send button based on whether the field has content.
+  Also enable/disable it to match.
+*/
+function updateSendBtn() {
+  const hasText = transcriptT().value.trim().length > 0;
+  const btn = sendBtn();
+  btn.classList.toggle('visible', hasText);
+  btn.disabled = !hasText || state.isThinking;
+}
+
+/*
+  Called on every keystroke in the textarea.
+  Resizes the field and updates the send button visibility.
+*/
+function handleTextInput(ta) {
+  autoResize(ta);
+  updateSendBtn();
+}
+
+/*
+  Submit on Enter (without Shift).
+  Shift+Enter inserts a newline as normal — useful for
+  multi-line questions.
+*/
+function handleTextKeydown(event) {
+  if (event.key === 'Enter' && !event.shiftKey) {
+    event.preventDefault(); // don't add a newline
+    submitTextQuestion();
+  }
+}
+
+/*
+  Read the textarea value and submit it as a question.
+  This is the text-input equivalent of the mic's onresult handler.
+*/
+function submitTextQuestion() {
+  const question = transcriptT().value.trim();
+  if (!question || state.isThinking) return;
+  askQuestion(question);
+}
+
+function showAnswer(text, question = '') {
+  document.getElementById('answer-question').textContent =
+    question ? `"${question}"` : '';
+  answerT().textContent = text;
+  answerW().classList.add('visible');
+}
+
+function showThinkingCursor() {
+  answerT().innerHTML = '<span class="cursor"></span>';
+  answerW().classList.add('visible');
+}
+
+function showSpeakingIndicator(on) {
+  speakingEl().classList.toggle('visible', on);
+}
+
+
+/* ================================================================
+   6. ENTRY POINTS
+   ================================================================
+   Three public functions that orchestrate everything:
+
+   setApiKey()     — validates + stores the API key
+   handleMicClick()— toggles recording on/off
+   askQuestion()   — full pipeline: transcript → API → TTS
+================================================================ */
+
+function setApiKey() {
+  const input = document.getElementById('api-key-input');
+  const key   = input.value.trim();
+  const status = document.getElementById('key-status');
+
+  if (!key.startsWith('sk-ant-')) {
+    status.textContent = 'Key should start with sk-ant-';
+    status.className   = 'key-status err';
+    return;
+  }
+
+  state.apiKey = key;
+  input.value  = '•'.repeat(20); // mask the key visually
+  input.disabled = true;
+
+  status.textContent = 'Connected ✓';
+  status.className   = 'key-status ok';
+
+  // Unlock the voice card
+  document.getElementById('voice-card').classList.remove('locked');
+  setStatus('Type a question or press the mic');
+  transcriptT().focus();
+}
+
+function handleMicClick() {
+  /*
+    Toggle recording:
+    - If idle → start listening
+    - If recording → stop listening (user changed their mind)
+    - If thinking → do nothing (button is disabled anyway)
+  */
+  if (state.isThinking) return;
+
+  if (state.isRecording) {
+    // User pressed again to cancel
+    state.recognition?.stop();
+    setIdle();
+    setStatus('Press to ask a question');
+    return;
+  }
+
+  // Lazy-initialise SpeechRecognition on first use
+  if (!state.recognition) {
+    state.recognition = initRecognition();
+    if (!state.recognition) {
+      setStatus('Speech recognition not supported in this browser', 'error');
+      return;
+    }
+  }
+
+  // Cancel any ongoing speech before starting a new question
+  window.speechSynthesis.cancel();
+  showSpeakingIndicator(false);
+
+  setRecording(true);
+  setStatus('Listening…');
+  state.recognition.start();
+}
+
+async function askQuestion(question) {
+  /*
+    Full pipeline:
+    1. Show what the user asked (populate the textarea)
+    2. Clear the field and switch to "thinking" state
+    3. Call Claude API
+    4. Display the answer
+    5. Speak the answer aloud
+  */
+  if (state.isThinking) return;
+
+  // Stop any active recording
+  state.recognition?.stop();
+  setRecording(false);
+
+  // Show the question in the textarea (voice input sets it already;
+  // chip clicks set it here so the user can see what was asked)
+  showTranscript(question);
+
+  // Enter thinking state — disables textarea + send button
+  setThinking(true);
+  setStatus('Thinking…');
+  showThinkingCursor();
+
+  try {
+    const answer = await askClaude(question);
+
+    // Clear the textarea now that the question has been answered
+    transcriptT().value = '';
+    autoResize(transcriptT());
+
+    setThinking(false);
+    setIdle();
+
+    showAnswer(answer, question);
+    setStatus('Speaking…', 'active');
+    speakAnswer(answer);
+
+  } catch (err) {
+    setThinking(false);
+    setIdle();
+    showAnswer(`Sorry, something went wrong: ${err.message}`, question);
+    setStatus('Error — check your API key', 'error');
+    console.error('Claude API error:', err);
+  }
+}
+
+
+/* ================================================================
+   INITIALISE ON PAGE LOAD
+   ================================================================
+   Build the wine data string once. Everything else is event-driven.
+================================================================ */
+loadWineData().then(() => {
+  // Data is ready — but card stays locked until API key is entered too
+  console.log('Wine data ready');
+});
+</script>
+</body>
+</html>
